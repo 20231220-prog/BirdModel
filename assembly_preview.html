@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ムクドリ模倣ロボット 精密3Dアセンブリ ＆ 電子回路基板ビューワ</title>
+<style>
+  body { margin:0; overflow:hidden; background:#0b1120; font-family:-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; color:#f8fafc; }
+  #canvas-container { width:100vw; height:100vh; }
+  
+  #ui-panel {
+    position:absolute; top:18px; left:18px; background:rgba(15, 23, 42, 0.94); backdrop-filter:blur(12px);
+    border:1px solid #334155; border-radius:14px; padding:18px 22px; max-width:360px; box-shadow:0 12px 35px rgba(0,0,0,0.5);
+    z-index:10;
+  }
+  h2 { margin:0 0 4px 0; font-size:17px; color:#38bdf8; font-weight:800; display:flex; align-items:center; justify-content:space-between; }
+  .tag { font-size:11px; background:#0284c7; color:#e0f2fe; padding:3px 8px; border-radius:10px; font-weight:600; }
+  p.subtitle { margin:2px 0 12px 0; font-size:11.5px; color:#94a3b8; line-height:1.4; }
+  
+  .section-title { font-size:11px; font-weight:bold; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin:12px 0 6px 0; border-top:1px solid #1e293b; padding-top:8px; }
+  
+  .btn-row { display:flex; gap:8px; margin-bottom:10px; }
+  .btn {
+    flex:1; background:#0284c7; color:white; border:none; padding:8px 10px; border-radius:7px; cursor:pointer; font-weight:bold; font-size:11.5px; transition:all 0.2s;
+  }
+  .btn:hover { background:#0369a1; transform:translateY(-1px); }
+  .btn-secondary { background:#1e293b; color:#cbd5e1; border:1px solid #334155; }
+  .btn-secondary:hover { background:#334155; color:white; }
+
+  .slider-box { margin-bottom:10px; }
+  .slider-header { display:flex; justify-content:space-between; font-size:11.5px; font-weight:600; color:#cbd5e1; margin-bottom:4px; }
+  input[type=range] { width:100%; accent-color:#38bdf8; cursor:pointer; }
+  
+  select {
+    width:100%; background:#1e293b; border:1px solid #38bdf8; color:#f8fafc; padding:8px 10px; border-radius:7px; font-size:12.5px; font-weight:bold; cursor:pointer; margin-bottom:10px;
+  }
+  select:focus { outline:none; border-color:#38bdf8; }
+
+  /* スペックカード */
+  .spec-card {
+    background:rgba(2, 6, 23, 0.75); border:1.5px solid #0284c7; border-radius:10px; padding:10px 12px; margin-top:8px; font-size:11.5px;
+  }
+  .spec-card-pcb {
+    border-color: #8b5cf6; background:rgba(30, 16, 60, 0.5);
+  }
+  .spec-row { display:flex; justify-content:space-between; margin-bottom:3.5px; color:#cbd5e1; }
+  .spec-val { font-weight:bold; color:#38bdf8; }
+  .spec-val-pcb { font-weight:bold; color:#c084fc; }
+
+  #part-info {
+    position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+    background:rgba(15, 23, 42, 0.94); border:1px solid #38bdf8; border-radius:12px; padding:10px 24px;
+    font-size:12.5px; color:#f8fafc; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.6);
+    pointer-events:none; transition:all 0.3s; z-index:10;
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<div id="ui-panel">
+  <h2>
+    ムクドリ全パーツ設計
+    <span class="tag" id="main-tag">電子回路基板</span>
+  </h2>
+  <p class="subtitle" id="main-sub">Seeed Studio XIAO ESP32-C3 搭載 実装PCB</p>
+
+  <div class="section-title">パーツ表示フォーカス</div>
+  <select id="part-select">
+    <option value="all">【全パーツ組立ビュー】全体構造</option>
+    <option value="pcb">★【回路基板 拡大】XIAO ESP32-C3 搭載 実装PCB</option>
+    <option value="wing_root">★【第4歩 拡大】左右 翼根ホルダー (精密ヒンジ)</option>
+    <option value="frame">① 胴体フレーム (スケルトントラス)</option>
+    <option value="rod">③ コネクティングロッド (リンク棒)</option>
+    <option value="gear">④ クランク平歯車 (偏心ピン付)</option>
+    <option value="motor">⑤ 8520コアレスモーター</option>
+    <option value="battery">⑥ 1S 150mAh LiPoバッテリー</option>
+  </select>
+
+  <!-- 回路基板の精密スペックカード -->
+  <div class="spec-card spec-card-pcb" id="spec-card-pcb">
+    <div style="font-weight:bold; color:#c084fc; margin-bottom:5px; font-size:12px;">【電子回路基板 設計諸元】</div>
+    <div class="spec-row"><span>メインマイコン:</span><span class="spec-val-pcb">Seeed XIAO ESP32-C3</span></div>
+    <div class="spec-row"><span>基板外形寸法:</span><span class="spec-val-pcb">18.0 × 25.0 × 3.8 mm</span></div>
+    <div class="spec-row"><span>主翼モーター駆動:</span><span class="spec-val-pcb">N-ch MOSFET (AO3400A)</span></div>
+    <div class="spec-row"><span>尾翼ラダー制御:</span><span class="spec-val-pcb">1.7g サーボ端子 (50Hz PWM)</span></div>
+    <div class="spec-row"><span>充電・給電:</span><span class="spec-val-pcb">USB-C 内蔵 / 1S LiPo</span></div>
+    <div class="spec-row"><span>実装後予想重量:</span><span class="spec-val-pcb">約 2.1 g (超軽量)</span></div>
+  </div>
+
+  <!-- 翼根ホルダーの精密スペックカード -->
+  <div class="spec-card" id="spec-card-wing" style="display:none;">
+    <div style="font-weight:bold; color:#38bdf8; margin-bottom:5px; font-size:12px;">【翼根ホルダー 設計諸元】</div>
+    <div class="spec-row"><span>ロッド差し込み深さ:</span><span class="spec-val">16.0 mm (深嵌合)</span></div>
+    <div class="spec-row"><span>適合カーボンロッド径:</span><span class="spec-val">⌀1.0 mm (内径1.05)</span></div>
+    <div class="spec-row"><span>クランクホーン有効長:</span><span class="spec-val">6.5 mm (テコ比1:2)</span></div>
+    <div class="spec-row"><span>初期上反角 / 後退角:</span><span class="spec-val">+4° / +8° (自律安定)</span></div>
+    <div class="spec-row"><span>単体目標重量:</span><span class="spec-val">約 0.48 g (左右で1g)</span></div>
+  </div>
+
+  <div class="section-title">分解 ＆ 羽ばたき制御</div>
+  <div class="slider-box">
+    <div class="slider-header">
+      <span>パーツ分解展開 (Exploded View)</span>
+      <span id="explode-val">0%</span>
+    </div>
+    <input type="range" id="slider-explode" min="0" max="100" value="0">
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" id="btn-flap-toggle">羽ばたき停止</button>
+    <button class="btn btn-secondary" id="btn-cam-reset">視点リセット</button>
+  </div>
+</div>
+
+<div id="part-info">★【回路基板 拡大】Seeed Studio XIAO ESP32-C3 搭載 実装PCBを表示中</div>
+<div id="canvas-container"></div>
+
+<script>
+// シーン・カメラ・レンダラー
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1120);
+
+const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+// 初期視点: 基板クローズアップ
+camera.position.set(0, 10, 42);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.target.set(0, 24, 11);
+
+// ライティング
+const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
+dirLight.position.set(50, -50, 100);
+scene.add(dirLight);
+const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.6);
+rimLight.position.set(-50, 60, -30);
+scene.add(rimLight);
+const subLight = new THREE.DirectionalLight(0xc084fc, 0.4);
+subLight.position.set(0, 20, 50);
+scene.add(subLight);
+
+// 背景グリッド
+const grid = new THREE.GridHelper(300, 30, 0x1e293b, 0x0f172a);
+grid.rotation.x = Math.PI / 2;
+scene.add(grid);
+
+// ==========================================
+// マテリアル定義
+// ==========================================
+const matFrame = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.45, metalness: 0.15 });
+const matWingRoot = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35, metalness: 0.1 });
+const matWingRootGlow = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.25, metalness: 0.2 });
+const matRod = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.3 });
+const matGear = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.2 });
+const matMotor = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+const matBattery = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.4 });
+const matCarbon = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2 });
+const matCloth = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+
+// 電子回路専用マテリアル
+const matPCBGreen = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.35, metalness: 0.05 }); // FR-4 基板
+const matXIAOBlack = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 }); // XIAO 基板
+const matMetalShield = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.9, roughness: 0.2 }); // 金属シールド・USB-C
+const matICBlack = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 }); // モールドIC (MOSFET/ダイオード)
+const matConnector = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 }); // コネクタ樹脂
+const matGold = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.7, roughness: 0.3 }); // 金メッキランド
+const matLED = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 0.8 }); // 緑LED
+
+// ロボット全体グループ
+const robot = new THREE.Group();
+scene.add(robot);
+
+// ==========================================
+// 1. スケルトンフレーム
+// ==========================================
+const frameGroup = new THREE.Group();
+robot.add(frameGroup);
+
+const keel = new THREE.Mesh(new THREE.BoxGeometry(3.6, 98, 3.5), matFrame);
+keel.position.set(0, 31, -2); frameGroup.add(keel);
+
+const mRing1 = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 2.5, 24), matFrame);
+mRing1.rotation.x = Math.PI / 2; mRing1.position.set(0, -17, 4.5); frameGroup.add(mRing1);
+const mRing2 = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 2.5, 24), matFrame);
+mRing2.rotation.x = Math.PI / 2; mRing2.position.set(0, 1, 4.5); frameGroup.add(mRing2);
+
+function makeSideTruss(isL) {
+  const g = new THREE.Group();
+  const sign = isL ? -1 : 1;
+  g.position.set(sign * 5.8, 14, 6.5);
+  const b1 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 26, 2), matFrame);
+  b1.position.set(0, 0, 7.5); g.add(b1);
+  const b2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 26, 2), matFrame);
+  b2.position.set(0, 0, -7.5); g.add(b2);
+  const t1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 20, 1.4), matFrame);
+  t1.rotation.x = 0.55; g.add(t1);
+  const t2 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 20, 1.4), matFrame);
+  t2.rotation.x = -0.55; g.add(t2);
+  return g;
+}
+frameGroup.add(makeSideTruss(true));
+frameGroup.add(makeSideTruss(false));
+
+const pivL = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 6, 16), matFrame);
+pivL.rotation.x = Math.PI / 2; pivL.position.set(-7.5, 15, 16); frameGroup.add(pivL);
+const pivR = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 6, 16), matFrame);
+pivR.rotation.x = Math.PI / 2; pivR.position.set(7.5, 15, 16); frameGroup.add(pivR);
+
+// 中央上部デッキ
+const pcbDeck = new THREE.Mesh(new THREE.BoxGeometry(13.0, 20.0, 1.4), matFrame);
+pcbDeck.position.set(0, 24, 9.0);
+frameGroup.add(pcbDeck);
+
+// ==========================================
+// 2. モーター ＆ ギア ＆ バッテリー
+// ==========================================
+const motorGroup = new THREE.Group();
+const motorCan = new THREE.Mesh(new THREE.CylinderGeometry(4.25, 4.25, 20, 24), matMotor);
+motorCan.rotation.x = Math.PI / 2; motorGroup.add(motorCan);
+motorGroup.position.set(0, -8, 4.5);
+robot.add(motorGroup);
+
+const gearL = new THREE.Group();
+const gMeshL = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.2, 1.8, 32), matGear);
+gMeshL.rotation.z = Math.PI / 2; gearL.add(gMeshL);
+const pinL = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 3.5, 12), matFrame);
+pinL.rotation.z = Math.PI / 2; pinL.position.set(-1.8, 3.2, 0); gearL.add(pinL);
+gearL.position.set(-5.5, 12, 4);
+robot.add(gearL);
+
+const gearR = new THREE.Group();
+const gMeshR = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.2, 1.8, 32), matGear);
+gMeshR.rotation.z = Math.PI / 2; gearR.add(gMeshR);
+const pinR = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 3.5, 12), matFrame);
+pinR.rotation.z = Math.PI / 2; pinR.position.set(1.8, 3.2, 0); gearR.add(pinR);
+gearR.position.set(5.5, 12, 4);
+robot.add(gearR);
+
+const batteryGroup = new THREE.Group();
+batteryGroup.add(new THREE.Mesh(new THREE.BoxGeometry(11, 26, 5.5), matBattery));
+batteryGroup.position.set(0, 25, -4);
+robot.add(batteryGroup);
+
+const rodL = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 13), matRod); robot.add(rodL);
+const rodR = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 13), matRod); robot.add(rodR);
+
+// ==========================================
+// 3. 【新設計：精密 3D 電子回路基板 (PCB)】
+// ==========================================
+const pcbGroup = new THREE.Group();
+pcbGroup.position.set(0, 24, 10.4);
+robot.add(pcbGroup);
+
+function buildPrecisionPCB() {
+  const g = new THREE.Group();
+
+  // ① マザーボード基板本体 (18.0mm x 25.0mm x 0.8mm)
+  const mb = new THREE.Mesh(new THREE.BoxGeometry(18.0, 25.0, 0.8), matPCBGreen);
+  g.add(mb);
+
+  // 固定ネジ穴カラー (M1.4 ネジ部)
+  const holeL = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.85, 16), matFrame);
+  holeL.position.set(-6.5, -9.0, 0); g.add(holeL);
+  const holeR = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.85, 16), matFrame);
+  holeR.position.set(6.5, -9.0, 0); g.add(holeR);
+
+  // ② Seeed Studio XIAO ESP32-C3 マイコンモジュール
+  const xiaoGroup = new THREE.Group();
+  xiaoGroup.position.set(0, -1.0, 0.4);
+
+  // XIAO 基板 (17.5mm x 21.0mm x 1.0mm)
+  const xiaoSub = new THREE.Mesh(new THREE.BoxGeometry(17.5, 21.0, 1.0), matXIAOBlack);
+  xiaoSub.position.set(0, 0, 0.5);
+  xiaoGroup.add(xiaoSub);
+
+  // USB-C レセプタクル端子 (前方 9.0 x 7.5 x 3.2mm)
+  const usbc = new THREE.Mesh(new THREE.BoxGeometry(9.0, 7.5, 3.2), matMetalShield);
+  usbc.position.set(0, -8.5, 2.4);
+  xiaoGroup.add(usbc);
+
+  // RF 金属シールド缶 (後方 11.0 x 10.5 x 1.4mm)
+  const rfCan = new THREE.Mesh(new THREE.BoxGeometry(11.0, 10.5, 1.4), matMetalShield);
+  rfCan.position.set(0, 2.0, 1.6);
+  xiaoGroup.add(rfCan);
+
+  // セラミックアンテナ (後端 3.5 x 1.6 x 1.2mm)
+  const ant = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.6, 1.2), matICBlack);
+  ant.position.set(0, 8.5, 1.5);
+  xiaoGroup.add(ant);
+
+  // キャスタレーション金メッキ端子 (左右7個ずつ)
+  for (let i = 0; i < 7; i++) {
+    const yPin = -7.62 + i * 2.54;
+    const pinL = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 0.9), matGold);
+    pinL.position.set(-8.3, yPin, 0.5);
+    xiaoGroup.add(pinL);
+    const pinR = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 0.9), matGold);
+    pinR.position.set(8.3, yPin, 0.5);
+    xiaoGroup.add(pinR);
+  }
+  g.add(xiaoGroup);
+
+  // ③ 主翼モーター駆動 MOSFET (AO3400A: SOT-23)
+  const mosfet = new THREE.Mesh(new THREE.BoxGeometry(2.9, 1.4, 1.1), matICBlack);
+  mosfet.position.set(-5.5, 6.0, 0.95);
+  g.add(mosfet);
+
+  // ④ フライホイールダイオード (SS14 / 1N5819: SOD-123)
+  const diode = new THREE.Mesh(new THREE.BoxGeometry(2.7, 1.6, 1.2), matICBlack);
+  diode.position.set(-2.5, 6.0, 1.0);
+  g.add(diode);
+  const diodeBand = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.62, 1.22), matConnector);
+  diodeBand.position.set(-1.4, 6.0, 1.0);
+  g.add(diodeBand);
+
+  // ⑤ ゲート抵抗 R1 & プルダウン抵抗 R2 (0603)
+  const r1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.5), matICBlack);
+  r1.position.set(-6.5, 3.8, 0.65); g.add(r1);
+  const r2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.5), matICBlack);
+  r2.position.set(-6.5, 2.0, 0.65); g.add(r2);
+
+  // ⑥ 尾翼サーボコネクタ (JST-SH 1.0mm 3ピン 白色ハウジング)
+  const srvConn = new THREE.Mesh(new THREE.BoxGeometry(6.0, 4.2, 3.0), matConnector);
+  srvConn.position.set(3.8, 7.5, 1.9);
+  g.add(srvConn);
+
+  // ⑦ 電源スライドスイッチ (SW1)
+  const swBody = new THREE.Mesh(new THREE.BoxGeometry(8.5, 3.5, 3.5), matMetalShield);
+  swBody.position.set(-3.5, -10.5, 2.15); g.add(swBody);
+  const swKnob = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.4, 2.0), matICBlack);
+  swKnob.position.set(-3.5, -12.4, 2.15); g.add(swKnob);
+
+  // ⑧ 動作確認用 LED (緑色チップLED 0603)
+  const led = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.6), matLED);
+  led.position.set(6.2, 4.0, 0.7); g.add(led);
+
+  return g;
+}
+
+const precisionPCB = buildPrecisionPCB();
+pcbGroup.add(precisionPCB);
+
+// ==========================================
+// 4. 主翼 ＆ 翼根ホルダー
+// ==========================================
+const wingL = new THREE.Group(); wingL.position.set(-7.5, 15, 16); robot.add(wingL);
+const wingR = new THREE.Group(); wingR.position.set(7.5, 15, 16); robot.add(wingR);
+
+function buildPrecisionWingRoot(isLeft) {
+  const g = new THREE.Group();
+  const sign = isLeft ? -1 : 1;
+
+  const hingeBoss = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 6.0, 20), matWingRoot);
+  hingeBoss.rotation.x = Math.PI / 2; g.add(hingeBoss);
+
+  const flange1 = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.9, 0.8, 20), matWingRoot);
+  flange1.rotation.x = Math.PI / 2; flange1.position.set(0, -2.6, 0); g.add(flange1);
+  const flange2 = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.9, 0.8, 20), matWingRoot);
+  flange2.rotation.x = Math.PI / 2; flange2.position.set(0, 2.6, 0); g.add(flange2);
+
+  const socketGroup = new THREE.Group();
+  socketGroup.rotation.y = sign * THREE.MathUtils.degToRad(4.0);
+  socketGroup.rotation.z = sign * THREE.MathUtils.degToRad(8.0);
+  g.add(socketGroup);
+
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.4, 16.0, 16), matWingRootGlow);
+  sleeve.rotation.z = isLeft ? Math.PI / 2 : -Math.PI / 2;
+  sleeve.position.set(sign * 8.0, 0, 0);
+  socketGroup.add(sleeve);
+
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, 1.2, 16), matWingRoot);
+  lip.rotation.z = isLeft ? Math.PI / 2 : -Math.PI / 2;
+  lip.position.set(sign * 15.6, 0, 0);
+  socketGroup.add(lip);
+
+  const hornArm = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.4, 6.5), matWingRoot);
+  hornArm.position.set(sign * 3.5, 0, -3.25); g.add(hornArm);
+
+  const hornEnd = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.0, 2.4, 16), matWingRoot);
+  hornEnd.rotation.x = Math.PI / 2; hornEnd.position.set(sign * 3.5, 0, -6.5); g.add(hornEnd);
+
+  const gusset = new THREE.Mesh(new THREE.BoxGeometry(6.0, 1.4, 4.0), matWingRoot);
+  gusset.position.set(sign * 5.0, 0, -2.5); gusset.rotation.y = sign * 0.45; g.add(gusset);
+
+  const cRod = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 150, 12), matCarbon);
+  cRod.rotation.z = isLeft ? Math.PI / 2 : -Math.PI / 2; cRod.position.set(sign * 83, 0, 0);
+  socketGroup.add(cRod);
+
+  const s = new THREE.Shape();
+  s.moveTo(0, 0); s.lineTo(sign * 155, 0); s.lineTo(sign * 135, 35); s.lineTo(0, 65); s.closePath();
+  const cloth = new THREE.Mesh(new THREE.ShapeGeometry(s), matCloth);
+  socketGroup.add(cloth);
+
+  return g;
+}
+
+wingL.add(buildPrecisionWingRoot(true));
+wingR.add(buildPrecisionWingRoot(false));
+
+// 尾翼
+const tailGroup = new THREE.Group();
+const tailBoom = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 40, 12), matCarbon);
+tailBoom.rotation.x = Math.PI / 2; tailBoom.position.set(0, 85, 2); tailGroup.add(tailBoom);
+const ts = new THREE.Shape();
+ts.moveTo(0, 80); ts.lineTo(-30, 108); ts.lineTo(30, 108); ts.closePath();
+const tCloth = new THREE.Mesh(new THREE.ShapeGeometry(ts), matCloth);
+tailGroup.add(tCloth);
+robot.add(tailGroup);
+
+// アニメーションループ
+let isFlapping = true;
+let explodeProgress = 0.0;
+let clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const time = clock.getElapsedTime();
+
+  if (isFlapping) {
+    const angleRad = THREE.MathUtils.degToRad(29.5) * Math.sin(time * 12.0 * 2.0 * Math.PI);
+    wingL.rotation.y = angleRad;
+    wingR.rotation.y = -angleRad;
+
+    const gearRot = time * 12.0 * 2.0 * Math.PI;
+    gearL.rotation.x = gearRot;
+    gearR.rotation.x = -gearRot;
+
+    const zL = 10.0 + 3.2 * Math.sin(gearRot);
+    rodL.position.set(-7.5 - explodeProgress * 25, 12, zL);
+    rodR.position.set(7.5 + explodeProgress * 25, 12, zL);
+  }
+
+  // 分解ビュー
+  const exp = explodeProgress;
+  frameGroup.position.set(0, 0, -exp * 10);
+  motorGroup.position.set(0, -8 - exp * 35, 4.5);
+  batteryGroup.position.set(0, 25, -4 - exp * 25);
+  pcbGroup.position.set(0, 24, 10.4 + exp * 35);
+  tailGroup.position.set(0, exp * 45, 0);
+
+  gearL.position.set(-5.5 - exp * 20, 12, 4);
+  gearR.position.set(5.5 + exp * 20, 12, 4);
+  wingL.position.set(-7.5 - exp * 40, 15, 16 + exp * 15);
+  wingR.position.set(7.5 + exp * 40, 15, 16 + exp * 15);
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// UI イベント
+document.getElementById('slider-explode').addEventListener('input', function(e) {
+  explodeProgress = parseFloat(e.target.value) / 100.0;
+  document.getElementById('explode-val').innerText = e.target.value + '%';
+});
+
+document.getElementById('btn-flap-toggle').addEventListener('click', function() {
+  isFlapping = !isFlapping;
+  this.innerText = isFlapping ? '羽ばたき停止' : '羽ばたき再開';
+});
+
+document.getElementById('btn-cam-reset').addEventListener('click', function() {
+  const sel = document.getElementById('part-select').value;
+  if (sel === 'pcb') {
+    controls.target.set(0, 24, 11);
+    camera.position.set(0, 10, 36);
+  } else if (sel === 'wing_root') {
+    controls.target.set(0, 15, 16);
+    camera.position.set(0, -25, 24);
+  } else {
+    controls.target.set(0, 25, 10);
+    camera.position.set(0, -115, 70);
+  }
+});
+
+// パーツフォーカス切り替え
+document.getElementById('part-select').addEventListener('change', function(e) {
+  const val = e.target.value;
+  const info = document.getElementById('part-info');
+  const cardWing = document.getElementById('spec-card-wing');
+  const cardPCB = document.getElementById('spec-card-pcb');
+  const tag = document.getElementById('main-tag');
+  const sub = document.getElementById('main-sub');
+  
+  frameGroup.visible = true;
+  motorGroup.visible = true;
+  gearL.visible = true;
+  gearR.visible = true;
+  batteryGroup.visible = true;
+  pcbGroup.visible = true;
+  wingL.visible = true;
+  wingR.visible = true;
+  rodL.visible = true;
+  rodR.visible = true;
+  tailGroup.visible = true;
+  cardWing.style.display = 'none';
+  cardPCB.style.display = 'none';
+
+  if (val === 'pcb') {
+    frameGroup.visible = false;
+    motorGroup.visible = false;
+    gearL.visible = false;
+    gearR.visible = false;
+    batteryGroup.visible = false;
+    wingL.visible = false;
+    wingR.visible = false;
+    rodL.visible = false;
+    rodR.visible = false;
+    tailGroup.visible = false;
+    cardPCB.style.display = 'block';
+    tag.innerText = '電子回路基板';
+    tag.style.background = '#8b5cf6';
+    sub.innerText = 'Seeed Studio XIAO ESP32-C3 搭載 実装PCB';
+    controls.target.set(0, 24, 11);
+    camera.position.set(0, 4, 38);
+    controls.update();
+    info.innerText = '★【回路基板 拡大】XIAO ESP32-C3、MOSFET、USB-C、サーボコネクタを拡大表示中';
+  } else if (val === 'wing_root') {
+    frameGroup.visible = false;
+    motorGroup.visible = false;
+    gearL.visible = false;
+    gearR.visible = false;
+    batteryGroup.visible = false;
+    pcbGroup.visible = false;
+    rodL.visible = false;
+    rodR.visible = false;
+    tailGroup.visible = false;
+    cardWing.style.display = 'block';
+    tag.innerText = '第4歩: 翼根ヒンジ';
+    tag.style.background = '#0284c7';
+    sub.innerText = '肩関節ヒンジ ＆ 前縁カーボンロッド固定ソケット';
+    controls.target.set(0, 15, 16);
+    camera.position.set(0, -25, 24);
+    controls.update();
+    info.innerText = '【第4歩 翼根ホルダー】深さ16mmソケット ＆ ガセット補強を拡大表示中';
+  } else if (val === 'frame') {
+    motorGroup.visible = false;
+    gearL.visible = false;
+    gearR.visible = false;
+    batteryGroup.visible = false;
+    pcbGroup.visible = false;
+    wingL.visible = false;
+    wingR.visible = false;
+    rodL.visible = false;
+    rodR.visible = false;
+    tailGroup.visible = false;
+    tag.innerText = '第2歩: 胴体フレーム';
+    tag.style.background = '#64748b';
+    sub.innerText = 'スケルトントラス肉抜き構造 (重量 3.2g)';
+    controls.target.set(0, 30, 5);
+    camera.position.set(0, -60, 45);
+    controls.update();
+    info.innerText = '【① 胴体フレーム】スケルトントラス肉抜き構造 (重量 3.2g)';
+  } else if (val === 'all') {
+    tag.innerText = '全体アセンブリ';
+    tag.style.background = '#0284c7';
+    sub.innerText = 'ムクドリ模倣ロボット 全パーツ組立モデル';
+    controls.target.set(0, 25, 10);
+    camera.position.set(0, -115, 70);
+    controls.update();
+    info.innerText = '【全パーツ組立ビュー】全体構造';
+  }
+});
+
+// 初期ロード時に選択状態を適用
+document.getElementById('part-select').dispatchEvent(new Event('change'));
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
